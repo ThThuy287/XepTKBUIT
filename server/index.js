@@ -63,7 +63,10 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-// (Giữ nguyên các routes API hiện tại của bạn ở đây...)
+const importRoutes = require('./routes/import'); // (tên file route xử lý Excel của bạn)
+const courseRoutes = require('./routes/courses'); // (tên file route lấy môn học)
+app.use('/api/import', importRoutes);
+app.use('/api/courses', courseRoutes);
 
 // GLOBAL ERROR HANDLER (Chống rò rỉ Stack Trace lên Frontend)
 app.use((err, req, res, next) => {
