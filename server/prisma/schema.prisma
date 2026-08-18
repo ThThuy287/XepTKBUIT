@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Import {
+  id         String     @id @default(uuid())
+  fileName   String
+  uploadedAt DateTime   @default(now())
+  status     String     @default("PROCESSING")
+  statistics String?
+  warnings   String?
+  courses    Course[]
+  schedules  Schedule[]
+}
+
+model Course {
+  id          String        @id @default(uuid())
+  importId    String
+  import      Import        @relation(fields: [importId], references: [id], onDelete: Cascade)
+  code        String
+  name        String
+  credits     Int
+  offerings   Offering[]
+  ClassOption ClassOption[]
+}
+
+model Offering {
+  id       String        @id @default(uuid())
+  courseId String
+  course   Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  type     String
+  options  ClassOption[]
+}
+
+// Tìm model ClassOption và cập nhật:
+model ClassOption {
+  id               String  @id @default(uuid())
+  courseId         String
+  offeringId       String
+  displayCode      String
+  rawCodes         String
+  teacherName      String?
+  componentCredits Int?
+  sessions         String
+  type             String
+
+  // THÊM 3 TRƯỜNG NÀY CHO PHASE 5.3
+  parentLtClassId    String? // ID của lớp LT cha
+  parentLtClassCode  String? // Mã hiển thị của lớp LT cha (vd: CE118.R11)
+  relationshipStatus String  @default("NOT_APPLICABLE") // LINKED_TO_LT, UNLINKED_TH, NOT_APPLICABLE
+
+  course   Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  offering Offering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+}
+
+model Schedule {
+  id              String   @id @default(uuid())
+  importId        String
+  import          Import   @relation(fields: [importId], references: [id], onDelete: Cascade)
+  name            String   @default("My Schedule")
+  selectedOptions String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now())
+}

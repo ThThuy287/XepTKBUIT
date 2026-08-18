@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+body {
+  background-color: #f4f5f9; /* Màu nền xám pastel nhạt khớp với UI mới */
+  margin: 0;
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+}

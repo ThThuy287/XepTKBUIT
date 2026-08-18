@@ -1,0 +1,39 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Directories
+node_modules/
+dist/
+build/
+client/dist/
+
+# Env Files (Bảo mật tuyệt đối)
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+*.env
+
+# Keep example envs
+!.env.example
+!client/.env.example
+!server/.env.example
+
+# Temporary files & Uploads
+server/uploads/
+.DS_Store
+
+# Prisma (Keep schema and migrations, ignore temp/SQLite if any)
+!server/prisma/schema.prisma
+!server/prisma/migrations/
