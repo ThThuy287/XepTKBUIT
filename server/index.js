@@ -59,8 +59,8 @@ const importRoutes = require('./routes/import');
 const courseRoutes = require('./routes/courses'); 
 
 // KHAI BÁO CHÍNH XÁC ĐỂ TRÁNH LỖI 404
-app.use('/api/import', importRoutes);
-app.use('/api/courses', courseRoutes);
+const apiRoutes = require('./routes/api');
+app.use('/api', apiRoutes);
 
 // ==========================================
 // 5. BẮT LỖI TOÀN CỤC (GLOBAL ERROR HANDLER)
