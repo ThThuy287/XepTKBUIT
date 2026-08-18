@@ -3,7 +3,7 @@ const FormData = require("form-data");
 const fs = require("fs");
 const path = require("path");
 
-const API_BASE = "'https://xeptkbuit.onrender.com/api";
+const API_BASE = "'https://xeptkbuit.onrender.com/api/courses";
 const serverDir = path.join(__dirname, "..");
 const excelFile = fs.readdirSync(serverDir).find(f => f.endsWith(".xlsx"));
 const FILE_NAME = excelFile || "KHONG_TIM_THAY_FILE.xlsx";
