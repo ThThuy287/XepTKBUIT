@@ -11,29 +11,41 @@ const server = http.createServer(app);
 const prisma = new PrismaClient();
 
 // ==========================================
-// 1. BẢO MẬT & CORS (Chuẩn Production)
+// 1. BẢO MẬT & CORS (Chấp nhận MỌI link Vercel)
 // ==========================================
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
-
-app.use(cors({
-  origin: CLIENT_URL,
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Cho phép localhost và mọi tên miền kết thúc bằng .vercel.app
+    if (!origin || origin.endsWith('.vercel.app') || origin.includes('localhost')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
-}));
+};
 
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // ==========================================
-// 2. SOCKET.IO (Khớp với CORS của Express)
+// 2. SOCKET.IO (Khớp tuyệt đối với cấu hình Express CORS)
 // ==========================================
 const io = new Server(server, {
   cors: {
-    origin: CLIENT_URL,
+    origin: function (origin, callback) {
+      if (!origin || origin.endsWith('.vercel.app') || origin.includes('localhost')) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true
   }
 });
 
-// Logic Socket.IO của bạn (Ví dụ: báo tiến trình import)
+// Logic Socket.IO
 io.on('connection', (socket) => {
   console.log(`🔌 Client connected: ${socket.id}`);
   socket.on('disconnect', () => {
@@ -41,7 +53,7 @@ io.on('connection', (socket) => {
   });
 });
 
-// Gắn io vào app để dùng trong các controller (như importController)
+// Gắn io vào app để có thể gọi từ bên trong các Controller
 app.set('io', io);
 
 // ==========================================
@@ -55,7 +67,7 @@ const upload = multer({
 // ==========================================
 // 4. ROUTES (ĐƯỜNG DẪN API)
 // ==========================================
-// Route kiểm tra sức khỏe máy chủ
+// Route kiểm tra trạng thái máy chủ
 app.get('/api/health', async (req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
@@ -66,7 +78,7 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-// CHỈ GỌI DUY NHẤT MASTER ROUTER (Đã xóa bỏ import.js và courses.js)
+// Nạp duy nhất Master Router (api.js)
 const apiRoutes = require('./routes/api');
 app.use('/api', apiRoutes);
 
@@ -82,7 +94,7 @@ app.use((err, req, res, next) => {
 });
 
 // ==========================================
-// 6. KHỞI ĐỘNG SERVER (Bind to 0.0.0.0 cho Render)
+// 6. KHỞI ĐỘNG SERVER
 // ==========================================
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, '0.0.0.0', () => {
