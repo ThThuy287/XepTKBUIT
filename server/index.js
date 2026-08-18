@@ -11,10 +11,12 @@ const server = http.createServer(app);
 const prisma = new PrismaClient();
 
 // ==========================================
-// 1. BẢO MẬT & CORS (Chuẩn Production Vercel)
+// 1. BẢO MẬT & CORS (Chuẩn Production)
 // ==========================================
+const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+
 app.use(cors({
-  origin: process.env.CLIENT_URL,
+  origin: CLIENT_URL,
   credentials: true
 }));
 
@@ -25,17 +27,25 @@ app.use(express.json());
 // ==========================================
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL,
+    origin: CLIENT_URL,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true
   }
 });
 
-// NẾU BẠN CÓ LOGIC SOCKET.IO (io.on('connection'...)), HÃY DÁN VÀO ĐÂY:
-// io.on('connection', (socket) => { ... });
+// Logic Socket.IO của bạn (Ví dụ: báo tiến trình import)
+io.on('connection', (socket) => {
+  console.log(`🔌 Client connected: ${socket.id}`);
+  socket.on('disconnect', () => {
+    console.log(`❌ Client disconnected: ${socket.id}`);
+  });
+});
+
+// Gắn io vào app để dùng trong các controller (như importController)
+app.set('io', io);
 
 // ==========================================
-// 3. CẤU HÌNH UPLOAD (Giới hạn 10MB)
+// 3. CẤU HÌNH UPLOAD FILE (Giới hạn 10MB)
 // ==========================================
 const upload = multer({
   dest: 'uploads/',
@@ -45,6 +55,7 @@ const upload = multer({
 // ==========================================
 // 4. ROUTES (ĐƯỜNG DẪN API)
 // ==========================================
+// Route kiểm tra sức khỏe máy chủ
 app.get('/api/health', async (req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
@@ -55,10 +66,7 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-const importRoutes = require('./routes/import'); 
-const courseRoutes = require('./routes/courses'); 
-
-// KHAI BÁO CHÍNH XÁC ĐỂ TRÁNH LỖI 404
+// CHỈ GỌI DUY NHẤT MASTER ROUTER (Đã xóa bỏ import.js và courses.js)
 const apiRoutes = require('./routes/api');
 app.use('/api', apiRoutes);
 
