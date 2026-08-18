@@ -13,9 +13,8 @@ export const useImport = () => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // FIX: Không dùng localhost hardcode. Lấy URL từ biến môi trường.
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-    const backendUrl = apiUrl.replace('/api', ''); // Tách lấy domain gốc cho Socket
+    // SỬA TRỰC TIẾP THÀNH LINK RENDER THAY VÌ DÙNG import.meta.env
+    const backendUrl = 'https://xeptkbuit.onrender.com';
     
     const socket = io(backendUrl);
     
