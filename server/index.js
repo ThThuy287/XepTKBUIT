@@ -13,23 +13,20 @@ const prisma = new PrismaClient();
 // SECURITY & CORS: Chỉ cho phép Vercel Domain truy cập
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 app.use(cors({
-  origin: CLIENT_URL,
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  origin: process.env.CLIENT_URL,
   credentials: true
 }));
+
 app.use(express.json());
-const corsOptions = {
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true); // Cho phép các tool như Postman, curl
-    if (origin.endsWith('.vercel.app') || allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    } else {
-      return callback(new Error('Not allowed by CORS'));
-    }
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true
-};
+
+// 2. SOCKET.IO CORS
+const io = new Server(server, {
+  cors: {
+    origin: process.env.CLIENT_URL,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    credentials: true
+  }
+});
 
 app.use(cors(corsOptions));
 app.use(express.json());
