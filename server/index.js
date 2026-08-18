@@ -10,8 +10,9 @@ const app = express();
 const server = http.createServer(app);
 const prisma = new PrismaClient();
 
-// SECURITY & CORS: Chỉ cho phép Vercel Domain truy cập
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+// ==========================================
+// 1. BẢO MẬT & CORS (Chuẩn Production Vercel)
+// ==========================================
 app.use(cors({
   origin: process.env.CLIENT_URL,
   credentials: true
@@ -19,7 +20,9 @@ app.use(cors({
 
 app.use(express.json());
 
-// 2. SOCKET.IO CORS
+// ==========================================
+// 2. SOCKET.IO (Khớp với CORS của Express)
+// ==========================================
 const io = new Server(server, {
   cors: {
     origin: process.env.CLIENT_URL,
@@ -28,31 +31,20 @@ const io = new Server(server, {
   }
 });
 
-app.use(cors(corsOptions));
-app.use(express.json());
-// SOCKET.IO CORS
-const io = new Server(server, {
-  cors: {
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
-      if (origin.endsWith('.vercel.app') || allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      } else {
-        return callback(new Error('Not allowed by CORS'));
-      }
-    },
-    methods: ["GET", "POST"]
-  }
-});
-// (Giữ nguyên logic socket hiện tại của bạn ở đây...)
+// NẾU BẠN CÓ LOGIC SOCKET.IO (io.on('connection'...)), HÃY DÁN VÀO ĐÂY:
+// io.on('connection', (socket) => { ... });
 
-// BẢO MẬT: Giới hạn File Upload 10MB
+// ==========================================
+// 3. CẤU HÌNH UPLOAD (Giới hạn 10MB)
+// ==========================================
 const upload = multer({
   dest: 'uploads/',
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB Max
+  limits: { fileSize: 10 * 1024 * 1024 } 
 });
 
-// ROUTE: Health Check cho Render biết Server sống hay chết
+// ==========================================
+// 4. ROUTES (ĐƯỜNG DẪN API)
+// ==========================================
 app.get('/api/health', async (req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
@@ -63,12 +55,16 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-const importRoutes = require('./routes/import'); // (tên file route xử lý Excel của bạn)
-const courseRoutes = require('./routes/courses'); // (tên file route lấy môn học)
+const importRoutes = require('./routes/import'); 
+const courseRoutes = require('./routes/courses'); 
+
+// KHAI BÁO CHÍNH XÁC ĐỂ TRÁNH LỖI 404
 app.use('/api/import', importRoutes);
 app.use('/api/courses', courseRoutes);
 
-// GLOBAL ERROR HANDLER (Chống rò rỉ Stack Trace lên Frontend)
+// ==========================================
+// 5. BẮT LỖI TOÀN CỤC (GLOBAL ERROR HANDLER)
+// ==========================================
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({
@@ -77,7 +73,9 @@ app.use((err, req, res, next) => {
   });
 });
 
-// STARTUP SERVER (Bind to 0.0.0.0 cho Render)
+// ==========================================
+// 6. KHỞI ĐỘNG SERVER (Bind to 0.0.0.0 cho Render)
+// ==========================================
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
