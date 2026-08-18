@@ -18,11 +18,32 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true); // Cho phép các tool như Postman, curl
+    if (origin.endsWith('.vercel.app') || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true
+};
 
+app.use(cors(corsOptions));
+app.use(express.json());
 // SOCKET.IO CORS
 const io = new Server(server, {
   cors: {
-    origin: CLIENT_URL,
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+      if (origin.endsWith('.vercel.app') || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        return callback(new Error('Not allowed by CORS'));
+      }
+    },
     methods: ["GET", "POST"]
   }
 });
