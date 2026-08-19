@@ -144,7 +144,17 @@ function extractPeriods(str) {
 exports.parseExcel = async (filePath, io) => {
   console.log("🚀🚀🚀 [BẮT ĐẦU TIẾP NHẬN FILE] 🚀🚀🚀");
   console.log("📂 Đường dẫn file:", filePath);
-  const workbook = xlsx.readFile(filePath);
+  
+  let workbook;
+  try {
+    // Ép hệ thống đọc file và in ra lỗi nếu hỏng
+    workbook = xlsx.readFile(filePath);
+    console.log("📑 CÁC SHEET TÌM THẤY:", workbook.SheetNames);
+  } catch (error) {
+    console.error("❌ LỖI TRÍ MẠNG LÚC ĐỌC FILE TỪ Ổ ĐĨA RENDER:");
+    console.error(error);
+    throw new Error("Không thể đọc được file Excel từ đường dẫn: " + filePath);
+  }
   const coursesMap = {};
   const warnings = [];
 
