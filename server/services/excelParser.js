@@ -63,10 +63,30 @@ const detectFormatAndHeaderRow = (sheet) => {
 };
 
 // 3. THUẬT TOÁN EXTRACT PERIODS DETERMINISTIC CHUẨN XÁC
+// HÀM BÓC TÁCH TIẾT HỌC SIÊU CHUẨN (HỖ TRỢ DẤU GẠCH NGANG)
 function extractPeriods(str) {
   if (!str) return [];
   let s = String(str).trim();
   let parsed = [];
+
+  // 1. Trường hợp dùng dấu gạch ngang (VD: "3-12", "6-10", "1-5")
+  if (s.includes('-')) {
+    const parts = s.split('-');
+    if (parts.length === 2) {
+      let start = parseInt(parts[0].trim(), 10);
+      let end = parseInt(parts[1].trim(), 10);
+      
+      // Nếu là dải số hợp lệ, bung mảng từ start đến end
+      if (!isNaN(start) && !isNaN(end) && start <= end) {
+        for (let i = start; i <= end; i++) {
+          parsed.push(i);
+        }
+        return [...new Set(parsed)].sort((a, b) => a - b);
+      }
+    }
+  }
+
+  // 2. Trường hợp chuỗi số liền nhau của format cũ (VD: "12345", "678910")
   let i = 0;
   while (i < s.length) {
     const nextTwo = s.substring(i, i + 2);
@@ -74,15 +94,16 @@ function extractPeriods(str) {
       parsed.push(parseInt(nextTwo, 10));
       i += 2;
     } else if (s[i] === '0') {
-      parsed.push(10);
+      parsed.push(10); // Quy ước UIT: 0 là tiết 10
       i += 1;
     } else if (/\d/.test(s[i])) {
       parsed.push(parseInt(s[i], 10));
       i += 1;
     } else {
-      i += 1;
+      i += 1; // Bỏ qua các ký tự rác
     }
   }
+  
   return [...new Set(parsed)].sort((a, b) => a - b);
 }
 
