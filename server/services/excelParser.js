@@ -11,19 +11,28 @@ const normalizeHeader = (header) => {
 };
 
 const HEADER_MAP = {
-  'MAMH': 'MAMH', 'MAMONHOC': 'MAMH', 'MÃMH': 'MAMH',
-  'MALOP': 'MALOP', 'MÃLỚP': 'MALOP',
-  'TENMH': 'TENMH', 'TENMONHOC': 'TENMH', 'TÊNMÔNHỌC': 'TENMH',
-  'MAGV': 'MAGV', 'MÃGV': 'MAGV',
-  'TENGV': 'TENGV', 'TÊNGV': 'TENGV', 'TÊNGIÁOVIÊN': 'TENGV',
-  'SOTC': 'SOTC', 'SỐTC': 'SOTC',
+  // Mã môn & Tên môn
+  'MAMH': 'MAMH', 'MAMONHOC': 'MAMH',
+  'MALOP': 'MALOP',
+  'TENMH': 'TENMH', 'TENMONHOC': 'TENMH',
+  
+  // XỬ LÝ LỖI GIẢNG VIÊN: Bổ sung CBGD, Trợ giảng, Giảng viên
+  'MAGV': 'MAGV',
+  'TENGV': 'TENGV', 'TENGIANGVIEN': 'TENGV', 'GIANGVIEN': 'TENGV', 
+  'CBGD': 'TENGV', 'TENCBGD': 'TENGV', 'CANBOGIANGDAY': 'TENGV',
+  'TROGIANG': 'TENGV', 'TENTROGIANG': 'TENGV',
+  
+  // XỬ LÝ LỖI TÍN CHỈ: Bổ sung TC, Tín chỉ, Số tín chỉ
+  'SOTC': 'SOTC', 'TC': 'SOTC', 'TINCHI': 'SOTC', 'SOTINCHI': 'SOTC',
+  
+  // Các cột còn lại
   'HTGD': 'HTGD',
-  'THU': 'THU', 'THỨ': 'THU',
-  'TIET': 'TIET', 'TIẾT': 'TIET',
-  'CACHTUAN': 'CACHTUAN', 'CÁCHTUẦN': 'CACHTUAN',
-  'PHONGHOC': 'PHONGHOC', 'PHÒNGHỌC': 'PHONGHOC',
-  'NBD': 'NBD', 'NGÀYBẮTĐẦU': 'NBD',
-  'NKT': 'NKT', 'NGÀYKẾTTHÚC': 'NKT',
+  'THU': 'THU',
+  'TIET': 'TIET',
+  'CACHTUAN': 'CACHTUAN',
+  'PHONGHOC': 'PHONGHOC', 'PHONG': 'PHONGHOC',
+  'NBD': 'NBD', 'NGAYBATDAU': 'NBD',
+  'NKT': 'NKT', 'NGAYKETTHUC': 'NKT',
   'MALOPLT': 'MA_LOP_LT'
 };
 
