@@ -27,15 +27,20 @@ const HEADER_MAP = {
 };
 
 // 2. Hàm quét động tìm dòng Header và định dạng Format
+// 2. Hàm quét động tìm dòng Header và định dạng Format (Bản Debug)
 const detectFormatAndHeaderRow = (sheet) => {
   const range = XLSX.utils.decode_range(sheet['!ref']);
   
-  // Chỉ quét tối đa 20 dòng đầu tiên để tìm Header
-  for (let R = range.s.r; R <= Math.min(range.e.r, 20); ++R) { 
+  console.log("=== BẮT ĐẦU QUÉT HEADER ===");
+  // Tăng tầm quét lên 50 dòng phòng hờ Header nằm sâu bên dưới
+  for (let R = range.s.r; R <= Math.min(range.e.r, 50); ++R) { 
+    const rawRowValues = [];
     const rowHeaders = [];
+    
     for (let C = range.s.c; C <= range.e.c; ++C) {
       const cell = sheet[XLSX.utils.encode_cell({ r: R, c: C })];
       if (cell && cell.v) {
+        rawRowValues.push(cell.v); // Lưu lại giá trị thô để soi log
         const normalized = normalizeHeader(cell.v);
         if (HEADER_MAP[normalized]) {
           rowHeaders.push(HEADER_MAP[normalized]);
@@ -43,8 +48,15 @@ const detectFormatAndHeaderRow = (sheet) => {
       }
     }
     
-    // Nếu dòng chứa 3 cột cốt lõi này -> Chốt đây là dòng Header
+    // Chỉ log những dòng có dữ liệu để tránh rác console
+    if (rawRowValues.length > 0) {
+      console.log(`[DÒNG ${R + 1}] Gốc:`, rawRowValues.slice(0, 5).join(" | "));
+      console.log(`[DÒNG ${R + 1}] Bắt được Key:`, rowHeaders);
+    }
+    
+    // Kiểm tra điều kiện chốt Header
     if (rowHeaders.includes('MAMH') && rowHeaders.includes('MALOP') && rowHeaders.includes('TENMH')) {
+      console.log("=> THÀNH CÔNG! TÌM THẤY HEADER TẠI DÒNG:", R + 1);
       const isFormat1171 = rowHeaders.includes('MA_LOP_LT');
       return {
         headerRowIndex: R,
@@ -52,6 +64,8 @@ const detectFormatAndHeaderRow = (sheet) => {
       };
     }
   }
+  
+  console.log("=== QUÉT XONG NHƯNG KHÔNG TÌM THẤY BỘ 3 HEADER BẮT BUỘC ===");
   throw new Error("PARSER FORMAT DETECTION FAILED");
 };
 
