@@ -49,68 +49,85 @@ const detectFormatAndHeaderRow = (sheet) => {
 };
 
 // ============================================================================
-// 2. PERIOD PARSER: DFS BACKTRACKING (CHỈ ĐỌC COMPACT NOTATION)
+// 2. COMPACT PERIOD PARSER (DETERMINISTIC PATH-SCORING ENGINE)
 // ============================================================================
 
 function parseCompactPeriods(str) {
   if (!str) return [];
-  let s = String(str).trim();
+  // Xóa mọi khoảng trắng lọt vào giữa chuỗi
+  let s = String(str).trim().replace(/\s+/g, '');
   if (!s) return [];
 
-  let bestPath = [];
+  let validPaths = [];
 
   function dfs(index, currentPath) {
     if (index === s.length) {
-      if (currentPath.length > bestPath.length) {
-        bestPath = [...currentPath];
-      }
+      validPaths.push([...currentPath]);
       return;
     }
 
-    const lastVal = currentPath.length > 0 ? currentPath[currentPath.length - 1] : null;
-
-    // RULE 1: Đọc 1 chữ số (từ 1 đến 9)
+    // Nhánh 1: Cắt 1 chữ số (từ 1 đến 9)
     let t1 = parseInt(s.substring(index, index + 1), 10);
     if (t1 >= 1 && t1 <= 9) {
-      if (lastVal === null || t1 === lastVal + 1) {
-        currentPath.push(t1);
-        dfs(index + 1, currentPath);
-        currentPath.pop();
-      }
+      currentPath.push(t1);
+      dfs(index + 1, currentPath);
+      currentPath.pop();
     }
 
-    // RULE 2: Số '0' đóng vai trò là tiết 10 (Chỉ hợp lệ nếu trước nó là số 9)
+    // Nhánh 2: Ký tự '0' mặc định mang giá trị 10 trong Compact Notation của UIT
     if (s[index] === '0') {
-      if (lastVal === 9) {
-        currentPath.push(10);
-        dfs(index + 1, currentPath);
-        currentPath.pop();
-      }
+      currentPath.push(10);
+      dfs(index + 1, currentPath);
+      currentPath.pop();
     }
 
-    // RULE 3: Đọc 2 chữ số (từ 10 đến 15)
+    // Nhánh 3: Cắt 2 chữ số (từ 10 đến 15)
     if (index + 1 < s.length) {
       let str2 = s.substring(index, index + 2);
       let t2 = parseInt(str2, 10);
       if (t2 >= 10 && t2 <= 15) {
-        if (lastVal === null || t2 === lastVal + 1) {
-          currentPath.push(t2);
-          dfs(index + 2, currentPath);
-          currentPath.pop();
-        }
+        currentPath.push(t2);
+        dfs(index + 2, currentPath);
+        currentPath.pop();
       }
     }
   }
 
   dfs(0, []);
 
-  if (bestPath.length > 0) {
-    return bestPath;
+  if (validPaths.length === 0) {
+    console.warn(`[PERIOD PARSER] INVALID_PERIOD_FORMAT: Không thể bóc tách "${s}"`);
+    return [];
   }
 
-  // RETURN MẢNG RỖNG KÈM WARNING ĐỂ KHÔNG GÂY LỖI 500 INTERNAL SERVER ERROR
-  console.warn(`[PERIOD PARSER] INVALID_PERIOD_FORMAT: Chuỗi "${s}" không hợp lệ.`);
-  return [];
+  // BỘ CHẤM ĐIỂM (Scoring Engine) ĐỂ CHỌN PATH HỢP LÝ NHẤT
+  let bestPath = validPaths[0];
+  let bestScore = -999999;
+
+  for (let path of validPaths) {
+    let isStrictlyIncreasing = true;
+    let contiguousCount = 0;
+    let jumpPenalty = 0;
+    
+    for (let i = 1; i < path.length; i++) {
+      if (path[i] <= path[i - 1]) isStrictlyIncreasing = false;
+      if (path[i] === path[i - 1] + 1) contiguousCount++;
+      
+      let jump = path[i] - path[i - 1];
+      if (jump > 1) jumpPenalty += jump;
+    }
+
+    let score = contiguousCount * 10;
+    if (isStrictlyIncreasing) score += 100;
+    score -= jumpPenalty;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestPath = path;
+    }
+  }
+
+  return [...new Set(bestPath)].sort((a, b) => a - b);
 }
 
 function parsePeriods(raw) {
@@ -118,6 +135,7 @@ function parsePeriods(raw) {
   let s = String(raw).trim();
   if (!s) return [];
 
+  // Tách đa Session nếu Excel chứa dấu phẩy (VD: "123, 67890")
   if (s.includes(',')) {
     return s.split(',').map(part => parseCompactPeriods(part)).filter(arr => arr.length > 0);
   }
@@ -128,9 +146,9 @@ function parsePeriods(raw) {
 
 const parseSessions = (thuRaw, tietRaw, phongRaw) => {
   if (!thuRaw && !tietRaw) return [];
-  const days = thuRaw ? thuRaw.toString().split(',').map(d => d.trim()).filter(Boolean) : [];
+  const days = thuRaw ? String(thuRaw).split(',').map(d => d.trim()).filter(Boolean) : [];
   const tietGroups = tietRaw ? parsePeriods(tietRaw) : [];
-  const rooms = phongRaw ? phongRaw.toString().split(',').map(r => r.trim()).filter(Boolean) : [];
+  const rooms = phongRaw ? String(phongRaw).split(',').map(r => r.trim()).filter(Boolean) : [];
   
   const sessions = [];
   const maxLen = Math.max(days.length, tietGroups.length);
@@ -149,17 +167,19 @@ const parseSessions = (thuRaw, tietRaw, phongRaw) => {
 // ============================================================================
 
 exports.parseExcel = async (filePath, io) => {
-  console.log("🚀🚀🚀 [BẮT ĐẦU TIẾP NHẬN FILE (FINAL COMPACT PARSER)] 🚀🚀🚀");
+  console.log("🚀🚀🚀 [BẮT ĐẦU TIẾP NHẬN FILE (FINAL GOLDEN PARSER)] 🚀🚀🚀");
 
-  // GOLDEN UNIT TESTS - CHẠY TRỰC TIẾP LÚC PARSE
-  const tests = {
-    "123": parseCompactPeriods("123"),
-    "67890": parseCompactPeriods("67890"),
-    "90": parseCompactPeriods("90"),
-    "11121314": parseCompactPeriods("11121314"),
-    "12": parseCompactPeriods("12"),
-  };
-  console.log("✅ PERIOD UNIT TEST PASS:", tests);
+  // CHẠY UNIT TEST TRỰC TIẾP LÚC KHỞI ĐỘNG SERVER ĐỂ CHỨNG MINH THUẬT TOÁN
+  console.log("--- BẮT ĐẦU PERIOD UNIT TEST ---");
+  console.log("123 ->", parseCompactPeriods("123"));
+  console.log("67890 ->", parseCompactPeriods("67890"));
+  console.log("90 ->", parseCompactPeriods("90"));
+  console.log("10 ->", parseCompactPeriods("10"));
+  console.log("12 ->", parseCompactPeriods("12"));
+  console.log("121314 ->", parseCompactPeriods("121314"));
+  console.log("11121314 ->", parseCompactPeriods("11121314"));
+  console.log("1245 ->", parseCompactPeriods("1245"));
+  console.log("--- KẾT THÚC UNIT TEST ---");
 
   let workbook;
   try {
@@ -210,6 +230,7 @@ exports.parseExcel = async (filePath, io) => {
         };
       }
       
+      // COURSE CREDITS LẤY CHUẨN TỪ LỚP LT
       if (type === 'LT') {
         coursesMap[courseCode].credits = credits;
         coursesMap[courseCode]._tempLtCredits = credits;
@@ -223,14 +244,21 @@ exports.parseExcel = async (filePath, io) => {
         coursesMap[courseCode].offerings.push(offering);
       }
 
+      // TRỰC TIẾP MAP TỪ EXCEL, KHÔNG SUY LUẬN
       const parentLtClassCode = mappedRow['MA_LOP_LT'] ? String(mappedRow['MA_LOP_LT']).trim() : null;
       const rawPeriodStr = mappedRow['TIET'] ? String(mappedRow['TIET']).trim() : "";
 
       const sessionsRaw = parseSessions(mappedRow['THU'], rawPeriodStr, mappedRow['PHONGHOC']);
       
-      // GOLDEN RECORD TRACE
-      if (courseCode === "IT005" && (classCode === "IT005.R11" || classCode === "IT005.R11.1")) {
-        console.log("🎯 [PERIOD TRACE]", { courseCode, classCode, rawPeriod: rawPeriodStr, parsedPeriods: sessionsRaw[0]?.periods || [], sessions: sessionsRaw });
+      // GOLDEN RECORD TRACE ĐỂ VERIFY LOGIC LUỒNG ĐI
+      if (["IT005", "CE118", "AI002"].includes(courseCode)) {
+        console.log("🎯 [PERIOD TRACE]", { 
+          courseCode, 
+          classCode, 
+          rawPeriod: rawPeriodStr, 
+          parsedPeriods: sessionsRaw[0]?.periods || [], 
+          sessions: sessionsRaw 
+        });
       }
 
       const sessions = sessionsRaw.length === 0 ? [{
@@ -239,7 +267,7 @@ exports.parseExcel = async (filePath, io) => {
         rawWeekPattern: mappedRow['CACHTUAN'] ? String(mappedRow['CACHTUAN']).trim() : "",
         startDate: mappedRow['NBD'] ? String(mappedRow['NBD']).trim() : "",
         endDate: mappedRow['NKT'] ? String(mappedRow['NKT']).trim() : "",
-        hasSchedule: false
+        hasSchedule: false // CHUẨN XÁC CHO LỚP HT2
       }] : sessionsRaw.map(s => ({
         ...s,
         weekPattern: mappedRow['CACHTUAN'] ? String(mappedRow['CACHTUAN']).trim() : "",
