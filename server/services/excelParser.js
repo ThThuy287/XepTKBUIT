@@ -1,6 +1,6 @@
 const XLSX = require('xlsx');
 
-// 1. CHUẨN HÓA HEADER
+// 1. CHUẨN HÓA HEADER & ÁNH XẠ CỘT (Đã fix lỗi Giảng viên & TC)
 const normalizeHeader = (header) => {
   if (!header) return '';
   return header.toString()
@@ -11,28 +11,26 @@ const normalizeHeader = (header) => {
 };
 
 const HEADER_MAP = {
-  // Mã môn & Tên môn
-  'MAMH': 'MAMH', 'MAMONHOC': 'MAMH',
-  'MALOP': 'MALOP',
-  'TENMH': 'TENMH', 'TENMONHOC': 'TENMH',
+  'MAMH': 'MAMH', 'MAMONHOC': 'MAMH', 'MÃMH': 'MAMH',
+  'MALOP': 'MALOP', 'MÃLỚP': 'MALOP',
+  'TENMH': 'TENMH', 'TENMONHOC': 'TENMH', 'TÊNMÔNHỌC': 'TENMH',
   
-  // XỬ LÝ LỖI GIẢNG VIÊN: Bổ sung CBGD, Trợ giảng, Giảng viên
-  'MAGV': 'MAGV',
-  'TENGV': 'TENGV', 'TENGIANGVIEN': 'TENGV', 'GIANGVIEN': 'TENGV', 
+  // Tên Giảng viên (Đã bao quát mọi case của UIT)
+  'MAGV': 'MAGV', 'MÃGV': 'MAGV',
+  'TENGV': 'TENGV', 'TÊNGV': 'TENGV', 'TÊNGIÁOVIÊN': 'TENGV', 'TENGIANGVIEN': 'TENGV', 'GIANGVIEN': 'TENGV', 
   'CBGD': 'TENGV', 'TENCBGD': 'TENGV', 'CANBOGIANGDAY': 'TENGV',
   'TROGIANG': 'TENGV', 'TENTROGIANG': 'TENGV',
   
-  // XỬ LÝ LỖI TÍN CHỈ: Bổ sung TC, Tín chỉ, Số tín chỉ
-  'SOTC': 'SOTC', 'TC': 'SOTC', 'TINCHI': 'SOTC', 'SOTINCHI': 'SOTC',
+  // Tín chỉ (Bao quát TC, SOTC)
+  'SOTC': 'SOTC', 'SỐTC': 'SOTC', 'TC': 'SOTC', 'TINCHI': 'SOTC', 'SOTINCHI': 'SOTC',
   
-  // Các cột còn lại
   'HTGD': 'HTGD',
-  'THU': 'THU',
-  'TIET': 'TIET',
-  'CACHTUAN': 'CACHTUAN',
-  'PHONGHOC': 'PHONGHOC', 'PHONG': 'PHONGHOC',
-  'NBD': 'NBD', 'NGAYBATDAU': 'NBD',
-  'NKT': 'NKT', 'NGAYKETTHUC': 'NKT',
+  'THU': 'THU', 'THỨ': 'THU',
+  'TIET': 'TIET', 'TIẾT': 'TIET',
+  'CACHTUAN': 'CACHTUAN', 'CÁCHTUẦN': 'CACHTUAN',
+  'PHONGHOC': 'PHONGHOC', 'PHÒNGHỌC': 'PHONGHOC', 'PHONG': 'PHONGHOC',
+  'NBD': 'NBD', 'NGÀYBẮTĐẦU': 'NBD', 'NGAYBATDAU': 'NBD',
+  'NKT': 'NKT', 'NGÀYKẾTTHÚC': 'NKT', 'NGAYKETTHUC': 'NKT',
   'MALOPLT': 'MA_LOP_LT'
 };
 
@@ -58,12 +56,11 @@ const detectFormatAndHeaderRow = (sheet) => {
 };
 
 // ============================================================================
-// 2. COMPACT PERIOD PARSER (DETERMINISTIC PATH-SCORING ENGINE)
+// 2. PERIOD PARSER: DFS BACKTRACKING + SCORING ENGINE
 // ============================================================================
 
 function parseCompactPeriods(str) {
   if (!str) return [];
-  // Xóa mọi khoảng trắng lọt vào giữa chuỗi
   let s = String(str).trim().replace(/\s+/g, '');
   if (!s) return [];
 
@@ -75,7 +72,7 @@ function parseCompactPeriods(str) {
       return;
     }
 
-    // Nhánh 1: Cắt 1 chữ số (từ 1 đến 9)
+    // Nhánh 1: 1 chữ số (1-9)
     let t1 = parseInt(s.substring(index, index + 1), 10);
     if (t1 >= 1 && t1 <= 9) {
       currentPath.push(t1);
@@ -83,14 +80,14 @@ function parseCompactPeriods(str) {
       currentPath.pop();
     }
 
-    // Nhánh 2: Ký tự '0' mặc định mang giá trị 10 trong Compact Notation của UIT
+    // Nhánh 2: Số 0 đại diện cho tiết 10
     if (s[index] === '0') {
       currentPath.push(10);
       dfs(index + 1, currentPath);
       currentPath.pop();
     }
 
-    // Nhánh 3: Cắt 2 chữ số (từ 10 đến 15)
+    // Nhánh 3: 2 chữ số (10-15)
     if (index + 1 < s.length) {
       let str2 = s.substring(index, index + 2);
       let t2 = parseInt(str2, 10);
@@ -105,11 +102,10 @@ function parseCompactPeriods(str) {
   dfs(0, []);
 
   if (validPaths.length === 0) {
-    console.warn(`[PERIOD PARSER] INVALID_PERIOD_FORMAT: Không thể bóc tách "${s}"`);
+    console.warn(`[PERIOD PARSER] Cảnh báo: Không thể bóc tách chuỗi "${s}"`);
     return [];
   }
 
-  // BỘ CHẤM ĐIỂM (Scoring Engine) ĐỂ CHỌN PATH HỢP LÝ NHẤT
   let bestPath = validPaths[0];
   let bestScore = -999999;
 
@@ -121,7 +117,6 @@ function parseCompactPeriods(str) {
     for (let i = 1; i < path.length; i++) {
       if (path[i] <= path[i - 1]) isStrictlyIncreasing = false;
       if (path[i] === path[i - 1] + 1) contiguousCount++;
-      
       let jump = path[i] - path[i - 1];
       if (jump > 1) jumpPenalty += jump;
     }
@@ -143,12 +138,9 @@ function parsePeriods(raw) {
   if (!raw) return [];
   let s = String(raw).trim();
   if (!s) return [];
-
-  // Tách đa Session nếu Excel chứa dấu phẩy (VD: "123, 67890")
   if (s.includes(',')) {
     return s.split(',').map(part => parseCompactPeriods(part)).filter(arr => arr.length > 0);
   }
-
   const single = parseCompactPeriods(s);
   return single.length > 0 ? [single] : [];
 }
@@ -176,20 +168,6 @@ const parseSessions = (thuRaw, tietRaw, phongRaw) => {
 // ============================================================================
 
 exports.parseExcel = async (filePath, io) => {
-  console.log("🚀🚀🚀 [BẮT ĐẦU TIẾP NHẬN FILE (FINAL GOLDEN PARSER)] 🚀🚀🚀");
-
-  // CHẠY UNIT TEST TRỰC TIẾP LÚC KHỞI ĐỘNG SERVER ĐỂ CHỨNG MINH THUẬT TOÁN
-  console.log("--- BẮT ĐẦU PERIOD UNIT TEST ---");
-  console.log("123 ->", parseCompactPeriods("123"));
-  console.log("67890 ->", parseCompactPeriods("67890"));
-  console.log("90 ->", parseCompactPeriods("90"));
-  console.log("10 ->", parseCompactPeriods("10"));
-  console.log("12 ->", parseCompactPeriods("12"));
-  console.log("121314 ->", parseCompactPeriods("121314"));
-  console.log("11121314 ->", parseCompactPeriods("11121314"));
-  console.log("1245 ->", parseCompactPeriods("1245"));
-  console.log("--- KẾT THÚC UNIT TEST ---");
-
   let workbook;
   try {
     workbook = XLSX.readFile(filePath);
@@ -234,18 +212,19 @@ exports.parseExcel = async (filePath, io) => {
       
       if (!coursesMap[courseCode]) {
         coursesMap[courseCode] = { 
-          code: courseCode, name: mappedRow['TENMH'] ? String(mappedRow['TENMH']).trim() : "", 
-          credits: 0, offerings: [], _tempLtCredits: 0 
+          code: courseCode, 
+          name: mappedRow['TENMH'] ? String(mappedRow['TENMH']).trim() : "", 
+          credits: 0, 
+          offerings: [], 
+          _typeCredits: {} // TẠO BIẾN TẠM ĐỂ THEO DÕI TÍN CHỈ TỪNG LOẠI
         };
       }
       
-      // COURSE CREDITS LẤY CHUẨN TỪ LỚP LT
-      if (type === 'LT') {
-        coursesMap[courseCode].credits = credits;
-        coursesMap[courseCode]._tempLtCredits = credits;
-      } else if (coursesMap[courseCode].credits === 0) {
-         coursesMap[courseCode].credits = credits; 
-      }
+      // LOGIC TÍN CHỈ MỚI: Ghi nhận số Tín chỉ lớn nhất cho từng loại (LT, HT1...) của môn học này
+      coursesMap[courseCode]._typeCredits[type] = Math.max(
+        coursesMap[courseCode]._typeCredits[type] || 0, 
+        credits
+      );
 
       let offering = coursesMap[courseCode].offerings.find(o => o.type === type);
       if (!offering) {
@@ -253,22 +232,9 @@ exports.parseExcel = async (filePath, io) => {
         coursesMap[courseCode].offerings.push(offering);
       }
 
-      // TRỰC TIẾP MAP TỪ EXCEL, KHÔNG SUY LUẬN
       const parentLtClassCode = mappedRow['MA_LOP_LT'] ? String(mappedRow['MA_LOP_LT']).trim() : null;
       const rawPeriodStr = mappedRow['TIET'] ? String(mappedRow['TIET']).trim() : "";
-
       const sessionsRaw = parseSessions(mappedRow['THU'], rawPeriodStr, mappedRow['PHONGHOC']);
-      
-      // GOLDEN RECORD TRACE ĐỂ VERIFY LOGIC LUỒNG ĐI
-      if (["IT005", "CE118", "AI002"].includes(courseCode)) {
-        console.log("🎯 [PERIOD TRACE]", { 
-          courseCode, 
-          classCode, 
-          rawPeriod: rawPeriodStr, 
-          parsedPeriods: sessionsRaw[0]?.periods || [], 
-          sessions: sessionsRaw 
-        });
-      }
 
       const sessions = sessionsRaw.length === 0 ? [{
         day: null, periods: [], room: "",
@@ -276,7 +242,7 @@ exports.parseExcel = async (filePath, io) => {
         rawWeekPattern: mappedRow['CACHTUAN'] ? String(mappedRow['CACHTUAN']).trim() : "",
         startDate: mappedRow['NBD'] ? String(mappedRow['NBD']).trim() : "",
         endDate: mappedRow['NKT'] ? String(mappedRow['NKT']).trim() : "",
-        hasSchedule: false // CHUẨN XÁC CHO LỚP HT2
+        hasSchedule: false
       }] : sessionsRaw.map(s => ({
         ...s,
         weekPattern: mappedRow['CACHTUAN'] ? String(mappedRow['CACHTUAN']).trim() : "",
@@ -294,6 +260,16 @@ exports.parseExcel = async (filePath, io) => {
       });
     }
   }
+
+  // TỔNG HỢP LẠI TOÀN BỘ TÍN CHỈ TRƯỚC KHI TRẢ VỀ (Course.credits = LT + HT1 + HT2...)
+  Object.values(coursesMap).forEach(course => {
+    let totalCourseCredits = 0;
+    Object.values(course._typeCredits).forEach(val => {
+      totalCourseCredits += val;
+    });
+    course.credits = totalCourseCredits;
+    delete course._typeCredits; // Dọn dẹp biến tạm
+  });
 
   if (Object.keys(coursesMap).length === 0) throw new Error("PARSER PRODUCED ZERO COURSES");
   return { coursesMap, warnings };
