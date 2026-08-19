@@ -1,4 +1,97 @@
 const xlsx = require('xlsx');
+// 1. Hàm chuẩn hóa tên cột (san phẳng tiếng Việt, khoảng trắng, xuống dòng)
+const normalizeHeader = (header) => {
+  if (!header) return '';
+  return header.toString()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/\s+/g, '')
+    .replace(/\n/g, '');
+};
+
+const HEADER_MAP = {
+  'MAMH': 'MAMH', 'MAMONHOC': 'MAMH', 'MÃMH': 'MAMH',
+  'MALOP': 'MALOP', 'MÃLỚP': 'MALOP',
+  'TENMH': 'TENMH', 'TENMONHOC': 'TENMH', 'TÊNMÔNHỌC': 'TENMH',
+  'MAGV': 'MAGV', 'MÃGV': 'MAGV',
+  'TENGV': 'TENGV', 'TÊNGV': 'TENGV', 'TÊNGIÁOVIÊN': 'TENGV',
+  'SOTC': 'SOTC', 'SỐTC': 'SOTC',
+  'HTGD': 'HTGD',
+  'THU': 'THU', 'THỨ': 'THU',
+  'TIET': 'TIET', 'TIẾT': 'TIET',
+  'CACHTUAN': 'CACHTUAN', 'CÁCHTUẦN': 'CACHTUAN',
+  'PHONGHOC': 'PHONGHOC', 'PHÒNGHỌC': 'PHONGHOC',
+  'NBD': 'NBD', 'NGÀYBẮTĐẦU': 'NBD',
+  'NKT': 'NKT', 'NGÀYKẾTTHÚC': 'NKT',
+  'MALOPLT': 'MA_LOP_LT' // Đã bị hàm normalize xóa khoảng trắng
+};
+
+// 2. Hàm quét động tìm dòng Header và định dạng Format
+const detectFormatAndHeaderRow = (sheet) => {
+  const range = XLSX.utils.decode_range(sheet['!ref']);
+  
+  // Chỉ quét tối đa 20 dòng đầu tiên để tìm Header
+  for (let R = range.s.r; R <= Math.min(range.e.r, 20); ++R) { 
+    const rowHeaders = [];
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const cell = sheet[XLSX.utils.encode_cell({ r: R, c: C })];
+      if (cell && cell.v) {
+        const normalized = normalizeHeader(cell.v);
+        if (HEADER_MAP[normalized]) {
+          rowHeaders.push(HEADER_MAP[normalized]);
+        }
+      }
+    }
+    
+    // Nếu dòng chứa 3 cột cốt lõi này -> Chốt đây là dòng Header
+    if (rowHeaders.includes('MAMH') && rowHeaders.includes('MALOP') && rowHeaders.includes('TENMH')) {
+      const isFormat1171 = rowHeaders.includes('MA_LOP_LT');
+      return {
+        headerRowIndex: R,
+        format: isFormat1171 ? 'FORMAT_DANHSACHLOP_1171' : 'FORMAT_TKB_STANDARD'
+      };
+    }
+  }
+  throw new Error("PARSER FORMAT DETECTION FAILED");
+};
+
+// 3. Hàm tách Thứ, Tiết, Phòng (Hỗ trợ môn học nhiều ngày & Không drop HT2)
+const parseSessions = (thuRaw, tietRaw, phongRaw) => {
+  if (!thuRaw && !tietRaw) return []; // Dành cho lớp HT2 (không có lịch)
+  
+  const days = thuRaw ? thuRaw.toString().split(',') : [];
+  const periodsStr = tietRaw ? tietRaw.toString().split(',') : [];
+  const rooms = phongRaw ? phongRaw.toString().split(',') : [];
+  
+  const sessions = [];
+  const maxLen = Math.max(days.length, periodsStr.length);
+  
+  for (let i = 0; i < maxLen; i++) {
+    const day = days[i] ? parseInt(days[i].trim()) : null;
+    let periods = [];
+    
+    if (periodsStr[i]) {
+      const pStr = periodsStr[i].trim();
+      let j = 0;
+      while (j < pStr.length) {
+        if (pStr[j] === '1' && pStr[j+1] && ['0','1','2','3','4','5'].includes(pStr[j+1])) {
+          periods.push(parseInt(pStr.substring(j, j+2)));
+          j += 2;
+        } else {
+          periods.push(parseInt(pStr[j]));
+          j++;
+        }
+      }
+    }
+    
+    sessions.push({
+      day: day,
+      periods: periods,
+      room: rooms[i] ? rooms[i].trim() : (rooms[0] ? rooms[0].trim() : '')
+    });
+  }
+  return sessions;
+};
 
 // HÀM BÓC TÁCH TIẾT HỌC (QUY ƯỚC: 0 = TIẾT 10)
 function extractPeriods(str) {
@@ -41,84 +134,93 @@ exports.parseExcel = async (filePath, io) => {
 
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
-    const jsonData = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: "" });
-
-    let headerIdx = -1;
-    for (let i = 0; i < Math.min(20, jsonData.length); i++) {
-      const rowStr = Object.values(jsonData[i]).join(" ").toUpperCase();
-      if (rowStr.includes("MÃ MH") && rowStr.includes("MÃ LỚP")) {
-        headerIdx = i;
-        break;
-      }
-    }
-    if (headerIdx === -1) continue;
-
-    const headers = Object.values(jsonData[headerIdx]).map(h => String(h).toUpperCase().trim());
-    const dataRows = jsonData.slice(headerIdx + 1);
-
-    const getCol = (keywords) => headers.findIndex(h => keywords.includes(h));
     
-    const cCourseCode = getCol(["MÃ MH", "MÃ MÔN"]);
-    const cClassCode = getCol(["MÃ LỚP"]);
-    const cCourseName = getCol(["TÊN MÔN HỌC", "TÊN MÔN"]);
-    const cTeacher = getCol(["TÊN GIẢNG VIÊN", "GIẢNG VIÊN", "TÊN TRỢ GIẢNG", "TRỢ GIẢNG", "CBGD"]);
-    const cCredits = getCol(["TỐ TC", "SỐ TC", "TC"]);
-    const cType = getCol(["HTGD"]);
-    const cDay = getCol(["THỨ"]);
-    const cPeriod = getCol(["TIẾT"]);
-    const cRoom = getCol(["PHÒNG HỌC", "PHÒNG"]);
-    const cWeek = getCol(["CÁCH TUẦN", "TUẦN"]);
-    const cStartDate = getCol(["NBD", "BẮT ĐẦU"]);
-    const cEndDate = getCol(["NKT", "KẾT THÚC"]);
+    // 1. NHẬN DIỆN FORMAT VÀ DÒNG HEADER ĐỘNG
+    let formatInfo;
+    try {
+      formatInfo = detectFormatAndHeaderRow(sheet);
+      console.log(`\n--- DỮ LIỆU SHEET: ${sheetName} ---`);
+      console.log("FORMAT DETECTED:", formatInfo.format);
+      console.log("HEADER ROW:", formatInfo.headerRowIndex + 1);
+    } catch (error) {
+      warnings.push(`Bỏ qua sheet "${sheetName}": Không nhận diện được định dạng TKB hợp lệ.`);
+      continue; // Bỏ qua sheet rỗng hoặc rác
+    }
 
-    for (const row of dataRows) {
-      const rawRow = Object.values(row);
-      const courseCode = cCourseCode !== -1 ? String(rawRow[cCourseCode]).trim() : "";
-      if (!courseCode || courseCode.toUpperCase().includes("MÃ")) continue;
+    // 2. PARSE DATA TỪ DÒNG HEADER ĐÃ TÌM ĐƯỢC (Tự động map key theo header)
+    const rawData = xlsx.utils.sheet_to_json(sheet, { 
+      range: formatInfo.headerRowIndex, 
+      defval: "" 
+    });
 
-      const classCode = cClassCode !== -1 ? String(rawRow[cClassCode]).trim() : "";
-      const courseName = cCourseName !== -1 ? String(rawRow[cCourseName]).trim() : "";
+    console.log("RAW ROW COUNT:", rawData.length);
+    let normalizedRowCount = 0;
+
+    // 3. XỬ LÝ TỪNG DÒNG (NORMALIZATION & MAPPING)
+    for (const row of rawData) {
+      // Ép tất cả các key của thư viện xlsx về Canonical Key của hệ thống
+      const mappedRow = {};
+      Object.keys(row).forEach(key => {
+        const normKey = normalizeHeader(key);
+        if (HEADER_MAP[normKey]) {
+          mappedRow[HEADER_MAP[normKey]] = row[key];
+        }
+      });
+
+      const courseCode = mappedRow['MAMH'] ? String(mappedRow['MAMH']).trim() : "";
+      const classCode = mappedRow['MALOP'] ? String(mappedRow['MALOP']).trim() : "";
+
+      // Dòng nào không có Mã MH và Mã Lớp thì bỏ qua (KHÔNG drop dòng có mã mà thiếu thứ/tiết)
+      if (!courseCode || !classCode || courseCode.toUpperCase().includes("MÃ")) continue;
       
-      let teacherName = cTeacher !== -1 ? String(rawRow[cTeacher]).trim() : "";
-      let teacherRole = "UNKNOWN";
-      if (cTeacher !== -1) {
-        const headerName = headers[cTeacher];
-        if (headerName.includes("TRỢ GIẢNG")) teacherRole = "TEACHING_ASSISTANT";
-        else if (headerName.includes("GIẢNG VIÊN")) teacherRole = "LECTURER";
-      }
+      normalizedRowCount++;
 
-      const credits = cCredits !== -1 ? parseFloat(rawRow[cCredits]) || 0 : 0;
+      const courseName = mappedRow['TENMH'] ? String(mappedRow['TENMH']).trim() : "";
+      const teacherName = mappedRow['TENGV'] ? String(mappedRow['TENGV']).trim() : (mappedRow['MAGV'] ? String(mappedRow['MAGV']).trim() : "");
+      
+      // Giả định role (có thể mở rộng thêm logic kiểm tra Tên GV có chứa chữ Trợ giảng)
+      let teacherRole = "LECTURER"; 
 
-      let type = cType !== -1 ? String(rawRow[cType]).trim().toUpperCase() : "UNKNOWN";
+      const credits = mappedRow['SOTC'] ? parseFloat(mappedRow['SOTC']) || 0 : 0;
+      
+      let type = mappedRow['HTGD'] ? String(mappedRow['HTGD']).trim().toUpperCase() : "UNKNOWN";
       if (!["LT", "HT1", "HT2", "ĐA", "DA", "KLTN", "TTTN"].includes(type)) type = "UNKNOWN";
       if (type === "ĐA") type = "DA";
 
-      const rawDay = cDay !== -1 ? String(rawRow[cDay]).trim() : "";
-      const rawPeriod = cPeriod !== -1 ? String(rawRow[cPeriod]).trim() : "";
-      const room = cRoom !== -1 ? String(rawRow[cRoom]).trim() : "";
-      const weekPattern = cWeek !== -1 ? String(rawRow[cWeek]).trim() : "";
-      const startDate = cStartDate !== -1 ? String(rawRow[cStartDate]).trim() : "";
-      const endDate = cEndDate !== -1 ? String(rawRow[cEndDate]).trim() : "";
+      // ĐỌC TRỰC TIẾP MA_LOP_LT ĐỂ LINK THỰC HÀNH VÀ LÝ THUYẾT (Format 1171)
+      const parentLtClassCode = mappedRow['MA_LOP_LT'] ? String(mappedRow['MA_LOP_LT']).trim() : null;
+      
+      const rawDay = mappedRow['THU'] ? String(mappedRow['THU']).trim() : "";
+      const rawPeriod = mappedRow['TIET'] ? String(mappedRow['TIET']).trim() : "";
+      const room = mappedRow['PHONGHOC'] ? String(mappedRow['PHONGHOC']).trim() : "";
+      const weekPattern = mappedRow['CACHTUAN'] ? String(mappedRow['CACHTUAN']).trim() : "";
+      const startDate = mappedRow['NBD'] ? String(mappedRow['NBD']).trim() : "";
+      const endDate = mappedRow['NKT'] ? String(mappedRow['NKT']).trim() : "";
 
+      // 4. PARSE SESSIONS (Xử lý đa ngày và logic Tiết UIT)
       const daysArr = rawDay.split(",").map(d => d.trim()).filter(Boolean);
       const periodsArr = rawPeriod.split(",").map(p => p.trim()).filter(Boolean);
+      const roomsArr = room.split(",").map(r => r.trim()).filter(Boolean);
 
       const sessions = [];
       const maxSessions = Math.max(daysArr.length, periodsArr.length);
 
+      // KHÔNG DROP DÒNG HT2/KLTN: Nếu không có ngày/tiết vẫn tạo mảng rỗng
       if (maxSessions === 0) {
-        sessions.push({ day: null, periods: [], room, weekPattern, weekPhase: "UNKNOWN", rawWeekPattern: weekPattern, startDate, endDate, hasSchedule: false });
+        sessions.push({ day: null, periods: [], room: roomsArr[0] || "", weekPattern, weekPhase: "UNKNOWN", rawWeekPattern: weekPattern, startDate, endDate, hasSchedule: false });
       } else {
         for (let i = 0; i < maxSessions; i++) {
           const dStr = daysArr[i] || daysArr[0] || null;
           const pStr = periodsArr[i] || periodsArr[0] || "";
+          const rStr = roomsArr[i] || roomsArr[0] || ""; // Lấy phòng tương ứng
+          
           const dInt = dStr ? parseInt(dStr, 10) : null;
-          const parsedPeriods = extractPeriods(pStr);
+          const parsedPeriods = extractPeriods(pStr); // Vẫn dùng hàm UIT gốc để bóc tách 0 = Tiết 10
           
           sessions.push({
             day: dInt,
             periods: parsedPeriods,
-            room,
+            room: rStr,
             weekPattern,
             weekPhase: "UNKNOWN",
             rawWeekPattern: weekPattern,
@@ -129,6 +231,7 @@ exports.parseExcel = async (filePath, io) => {
         }
       }
 
+      // 5. MAP VÀO DATABASE TẠM (coursesMap)
       if (!coursesMap[courseCode]) {
         coursesMap[courseCode] = { 
           code: courseCode, 
@@ -157,9 +260,15 @@ exports.parseExcel = async (filePath, io) => {
         teacherName,
         teacherRole,
         componentCredits: credits, 
+        parentLtClassCode, // <-- Biến sống còn của Format 1171
         sessions,
         rawCodes: [classCode]
       });
+    }
+    
+    console.log("NORMALIZED ROW COUNT:", normalizedRowCount);
+    if (normalizedRowCount === 0) {
+       warnings.push(`Sheet "${sheetName}" có format TKB nhưng không extract được dữ liệu chuẩn nào.`);
     }
   }
 
