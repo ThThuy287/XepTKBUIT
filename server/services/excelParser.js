@@ -142,6 +142,8 @@ function extractPeriods(str) {
 }
 
 exports.parseExcel = async (filePath, io) => {
+  console.log("🚀🚀🚀 [BẮT ĐẦU TIẾP NHẬN FILE] 🚀🚀🚀");
+  console.log("📂 Đường dẫn file:", filePath);
   const workbook = xlsx.readFile(filePath);
   const coursesMap = {};
   const warnings = [];
