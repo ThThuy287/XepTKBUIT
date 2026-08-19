@@ -51,7 +51,7 @@ const detectFormatAndHeaderRow = (sheet) => {
 };
 
 // ============================================================================
-// 2. COMPACT PERIOD PARSER (DETERMINISTIC BACKTRACKING / DP CHO TIẾT 1..15)
+// 2. COMPACT PERIOD PARSER (DETERMINISTIC BACKTRACKING - KHÔNG FALLBACK SAI)
 // ============================================================================
 
 function parseCompactPeriods(str) {
@@ -59,7 +59,7 @@ function parseCompactPeriods(str) {
   let s = String(str).trim();
   if (!s) return [];
 
-  // Xử lý trường hợp đặc biệt "12" -> [1, 2] theo yêu cầu thực tế thực nghiệm
+  // Xử lý trường hợp "12" đặc biệt
   if (s === "12") return [1, 2];
 
   const n = s.length;
@@ -85,11 +85,12 @@ function parseCompactPeriods(str) {
       }
     }
 
-    // Thử cắt token 2 chữ số (10..15) hoặc trường hợp số 0 đại diện cho 10 ("90" -> 9, 10)
+    // Thử cắt token 2 chữ số (10..15) hoặc chuỗi kết thúc bằng '0' đứng sau số 9 (VD: "90" -> [9, 10])
     if (index + 1 < n) {
       let sub2 = s.substring(index, index + 2);
       let t2 = parseInt(sub2, 10);
-      // Chấp nhận từ 10 đến 15, hoặc trường hợp đặc biệt kết thúc bằng '0' như "90" -> 10
+      
+      // Nếu là 10..15 chuẩn hoặc chuỗi kết thúc bằng '0' (như '90')
       if ((t2 >= 10 && t2 <= 15) || sub2 === "90" || sub2 === "00") {
         let actualVal = (sub2 === "90") ? 10 : t2;
         currentPath.push(actualVal);
@@ -103,7 +104,7 @@ function parseCompactPeriods(str) {
     if (arr.length === 0) return false;
     for (let i = 0; i < arr.length; i++) {
       if (arr[i] < 1 || arr[i] > 15) return false;
-      if (i > 0 && arr[i] !== arr[i - 1] + 1) return false; // Bắt buộc tăng liên tiếp chính xác (+1)
+      if (i > 0 && arr[i] !== arr[i - 1] + 1) return false; // Tuần tự tăng +1 tuyệt đối
     }
     return true;
   }
@@ -114,25 +115,8 @@ function parseCompactPeriods(str) {
     return [...new Set(bestValidPartition)].sort((a, b) => a - b);
   }
 
-  // Fallback an toàn nếu chuỗi không khớp chuẩn tăng liên tiếp tuyệt đối
-  let fallback = [];
-  let idx = 0;
-  while (idx < n) {
-    if (idx + 1 < n) {
-      let sub = s.substring(idx, idx + 2);
-      let val = parseInt(sub, 10);
-      if (val >= 10 && val <= 15) {
-        fallback.push(val);
-        idx += 2;
-        continue;
-      }
-    }
-    let c = s[idx];
-    if (c === '0') fallback.push(10);
-    else if (/\d/.test(c)) fallback.push(parseInt(c, 10));
-    idx++;
-  }
-  return [...new Set(fallback)].sort((a, b) => a - b);
+  // LOẠI BỎ FALLBACK LỎNG LẺO: Nếu không match được sequence chuẩn, quăng lỗi hoặc trả mảng rỗng theo yêu cầu chống tạo sai period.
+  throw new Error(`INVALID_PERIOD_FORMAT: Không thể phân tích chuỗi tiết "${s}"`);
 }
 
 function parsePeriods(raw) {
@@ -140,7 +124,6 @@ function parsePeriods(raw) {
   let s = String(raw).trim();
   if (!s) return [];
 
-  // Hỗ trợ đa nhóm cách nhau bởi dấu phẩy
   if (s.includes(',')) {
     return s.split(',').map(part => parseCompactPeriods(part)).filter(arr => arr.length > 0);
   }
@@ -173,7 +156,21 @@ const parseSessions = (thuRaw, tietRaw, phongRaw) => {
 };
 
 exports.parseExcel = async (filePath, io) => {
-  console.log("🚀🚀🚀 [BẮT ĐẦU TIẾP NHẬN FILE (COMPACT PARSER)] 🚀🚀🚀");
+  console.log("🚀🚀🚀 [BẮT ĐẦU TIẾP NHẬN FILE (STRICT UNIT TEST CHECK)] 🚀🚀🚀");
+
+  // CHẠY UNIT TEST TRỰC TIẾP KHI PARSER KHỞI ĐỘNG
+  try {
+    console.log("PERIOD UNIT TEST:", {
+      "123": parseCompactPeriods("123"),
+      "67890": parseCompactPeriods("67890"),
+      "90": parseCompactPeriods("90"),
+      "11121314": parseCompactPeriods("11121314"),
+      "12131415": parseCompactPeriods("12131415")
+    });
+  } catch (err) {
+    console.error("UNIT TEST FAILED:", err.message);
+  }
+
   let workbook;
   try {
     workbook = XLSX.readFile(filePath);
@@ -247,6 +244,18 @@ exports.parseExcel = async (filePath, io) => {
       const rawPeriodStr = mappedRow['TIET'] ? String(mappedRow['TIET']).trim() : "";
 
       const sessionsRaw = parseSessions(mappedRow['THU'], rawPeriodStr, mappedRow['PHONGHOC']);
+      
+      // LOG CHÍNH XÁC KHI GẶP IT005.R11 HOẶC IT005.R11.1 ĐỂ KIỂM TRA TRỰC TIẾP TRÊN RENDER
+      if (courseCode === "IT005" && (classCode === "IT005.R11" || classCode === "IT005.R11.1")) {
+        console.log("🎯 [EXACT RECORD LOG] ->", {
+          courseCode,
+          classCode,
+          rawPeriod: rawPeriodStr,
+          parsedPeriods: sessionsRaw[0]?.periods || [],
+          sessions: sessionsRaw
+        });
+      }
+
       const sessions = sessionsRaw.length === 0 ? [{
         day: null, periods: [], room: "",
         weekPattern: mappedRow['CACHTUAN'] ? String(mappedRow['CACHTUAN']).trim() : "",
