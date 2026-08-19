@@ -1,12 +1,12 @@
 const XLSX = require('xlsx');
 
-// 1. CHUẨN HÓA HEADER THUẬT TOÁN MỚI
+// 1. CHUẨN HÓA HEADER
 const normalizeHeader = (header) => {
   if (!header) return '';
   return header.toString()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Bỏ dấu
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .toUpperCase()
-    .replace(/\s+/g, '') // Bỏ TẤT CẢ khoảng trắng ("MA LOP LT" -> "MALOPLT")
+    .replace(/\s+/g, '')
     .replace(/\n/g, '');
 };
 
@@ -24,34 +24,22 @@ const HEADER_MAP = {
   'PHONGHOC': 'PHONGHOC', 'PHÒNGHỌC': 'PHONGHOC',
   'NBD': 'NBD', 'NGÀYBẮTĐẦU': 'NBD',
   'NKT': 'NKT', 'NGÀYKẾTTHÚC': 'NKT',
-  'MALOPLT': 'MA_LOP_LT' // Đã khớp với output của normalizeHeader
+  'MALOPLT': 'MA_LOP_LT'
 };
 
-// 2. DETECT HEADER VỚI LOG CHI TIẾT
 const detectFormatAndHeaderRow = (sheet) => {
   const range = XLSX.utils.decode_range(sheet['!ref']);
-  
   for (let R = range.s.r; R <= Math.min(range.e.r, 30); ++R) { 
-    const rawRowValues = [];
     const rowHeaders = [];
-    
     for (let C = range.s.c; C <= range.e.c; ++C) {
       const cell = sheet[XLSX.utils.encode_cell({ r: R, c: C })];
       if (cell && cell.v !== undefined && cell.v !== null) {
-        rawRowValues.push(cell.v);
         const normalized = normalizeHeader(cell.v);
         if (HEADER_MAP[normalized]) {
           rowHeaders.push(HEADER_MAP[normalized]);
         }
       }
     }
-    
-    if (rawRowValues.length > 0) {
-      console.log(`\n[DÒNG ${R + 1}]`);
-      console.log(`RAW:`, rawRowValues);
-      console.log(`NORMALIZED:`, rowHeaders);
-    }
-    
     if (rowHeaders.includes('MAMH') && rowHeaders.includes('MALOP') && rowHeaders.includes('TENMH')) {
       return {
         headerRowIndex: R,
@@ -62,83 +50,102 @@ const detectFormatAndHeaderRow = (sheet) => {
   throw new Error("KHÔNG TÌM THẤY BỘ 3 CỘT: MAMH, MALOP, TENMH");
 };
 
-// 3. THUẬT TOÁN EXTRACT PERIODS DETERMINISTIC CHUẨN XÁC
-// HÀM BÓC TÁCH TIẾT HỌC SIÊU CHUẨN (HỖ TRỢ DẤU GẠCH NGANG)
-function extractPeriods(str) {
-  if (!str) return [];
-  let s = String(str).trim();
-  let parsed = [];
+// ==========================================
+// 2. PERIOD PARSER THUẬT TOÁN MỚI (DETERMINISTIC)
+// ==========================================
 
-  // 1. Trường hợp dùng dấu gạch ngang (VD: "3-12", "6-10", "1-5")
-  if (s.includes('-')) {
-    const parts = s.split('-');
-    if (parts.length === 2) {
-      let start = parseInt(parts[0].trim(), 10);
-      let end = parseInt(parts[1].trim(), 10);
-      
-      // Nếu là dải số hợp lệ, bung mảng từ start đến end
-      if (!isNaN(start) && !isNaN(end) && start <= end) {
-        for (let i = start; i <= end; i++) {
-          parsed.push(i);
-        }
-        return [...new Set(parsed)].sort((a, b) => a - b);
+function parsePeriodToken(token) {
+  if (!token) return [];
+  let s = String(token).trim();
+  if (!s) return [];
+
+  // A. XỬ LÝ RANGE (Hỗ trợ các loại dấu gạch ngang: -, –, —)
+  const rangeRegex = /^(\d+)\s*[-–—]\s*(\d+)$/;
+  const rangeMatch = s.match(rangeRegex);
+  if (rangeMatch) {
+    let start = parseInt(rangeMatch[1], 10);
+    let end = parseInt(rangeMatch[2], 10);
+    if (!isNaN(start) && !isNaN(end) && start <= end) {
+      let res = [];
+      for (let i = start; i <= end; i++) {
+        res.push(i);
       }
+      return res;
     }
   }
 
-  // 2. Trường hợp chuỗi số liền nhau của format cũ (VD: "12345", "678910")
+  // B. XỬ LÝ COMPACT NOTATION (VD: "12345", "67890", "11121314")
+  let parsed = [];
   let i = 0;
   while (i < s.length) {
-    const nextTwo = s.substring(i, i + 2);
-    if (['10', '11', '12', '13', '14', '15'].includes(nextTwo)) {
-      parsed.push(parseInt(nextTwo, 10));
-      i += 2;
-    } else if (s[i] === '0') {
-      parsed.push(10); // Quy ước UIT: 0 là tiết 10
-      i += 1;
-    } else if (/\d/.test(s[i])) {
-      parsed.push(parseInt(s[i], 10));
-      i += 1;
-    } else {
-      i += 1; // Bỏ qua các ký tự rác
+    // Ưu tiên đọc số có 2 chữ số từ 10 đến 15
+    if (i + 1 < s.length) {
+      let sub2 = s.substring(i, i + 2);
+      let val2 = parseInt(sub2, 10);
+      if (val2 >= 10 && val2 <= 15) {
+        parsed.push(val2);
+        i += 2;
+        continue;
+      }
     }
+    // Đọc số 1 chữ số hoặc số 0 (đại diện cho tiết 10 trong một số chuỗi compact)
+    let char = s[i];
+    if (char === '0') {
+      parsed.push(10);
+    } else if (/\d/.test(char)) {
+      parsed.push(parseInt(char, 10));
+    }
+    i += 1;
   }
-  
+
   return [...new Set(parsed)].sort((a, b) => a - b);
 }
 
-// 4. PARSE SESSIONS
+function parsePeriods(raw) {
+  if (!raw) return [];
+  let s = String(raw).trim();
+  if (!s) return [];
+
+  // Hỗ trợ multi group phân tách bằng dấu phẩy
+  if (s.includes(',')) {
+    const parts = s.split(',');
+    return parts.map(part => parsePeriodToken(part)).filter(arr => arr.length > 0);
+  }
+
+  const single = parsePeriodToken(s);
+  return single.length > 0 ? [single] : [];
+}
+
+// ==========================================
+// 3. PARSE SESSIONS & EXCEL MAPPING
+// ==========================================
+
 const parseSessions = (thuRaw, tietRaw, phongRaw) => {
   if (!thuRaw && !tietRaw) return [];
-  const days = thuRaw ? thuRaw.toString().split(',') : [];
-  const periodsStr = tietRaw ? tietRaw.toString().split(',') : [];
-  const rooms = phongRaw ? phongRaw.toString().split(',') : [];
+  const days = thuRaw ? thuRaw.toString().split(',').map(d => d.trim()).filter(Boolean) : [];
+  const tietGroups = tietRaw ? parsePeriods(tietRaw) : [];
+  const rooms = phongRaw ? phongRaw.toString().split(',').map(r => r.trim()).filter(Boolean) : [];
   
   const sessions = [];
-  const maxLen = Math.max(days.length, periodsStr.length);
+  const maxLen = Math.max(days.length, tietGroups.length);
   
   for (let i = 0; i < maxLen; i++) {
-    const day = days[i] ? parseInt(days[i].trim()) : null;
-    const pStr = periodsStr[i] || "";
-    const parsedPeriods = extractPeriods(pStr);
-    const room = rooms[i] ? rooms[i].trim() : (rooms[0] ? rooms[0].trim() : '');
+    const day = days[i] ? parseInt(days[i], 10) : (days[0] ? parseInt(days[0], 10) : null);
+    const periods = tietGroups[i] || tietGroups[0] || [];
+    const room = rooms[i] ? rooms[i] : (rooms[0] || '');
     
-    sessions.push({ day, periods: parsedPeriods, room });
+    sessions.push({ day, periods, room });
   }
   return sessions;
 };
 
-// 5. HÀM XỬ LÝ CHÍNH
 exports.parseExcel = async (filePath, io) => {
   console.log("🚀🚀🚀 [BẮT ĐẦU TIẾP NHẬN FILE] 🚀🚀🚀");
-  console.log("📂 Đường dẫn file:", filePath);
-  
   let workbook;
   try {
     workbook = XLSX.readFile(filePath);
-    console.log("📑 CÁC SHEET TÌM THẤY:", workbook.SheetNames);
   } catch (error) {
-    console.error("❌ LỖI TRÍ MẠNG LÚC ĐỌC FILE TỪ Ổ ĐĨA RENDER:", error);
+    console.error("❌ LỖI ĐỌC FILE:", error);
     throw new Error("Không thể đọc được file Excel.");
   }
 
@@ -149,31 +156,18 @@ exports.parseExcel = async (filePath, io) => {
     const sheet = workbook.Sheets[sheetName];
     if (!sheet || !sheet['!ref']) continue;
 
-    console.log(`\n=== ĐANG QUÉT SHEET: ${sheetName} ===`);
     let formatInfo;
-    
     try {
       formatInfo = detectFormatAndHeaderRow(sheet);
-      console.log("=> FORMAT DETECTED:", formatInfo.format);
-      console.log("=> HEADER ROW:", formatInfo.headerRowIndex + 1);
     } catch (error) {
-      console.error(`❌ HEADER DETECTION FAILED: ${sheetName}`);
-      console.error(error);
       warnings.push(`HEADER DETECTION FAILED: ${sheetName}`);
-      continue; // Cố tình bỏ qua sheet rác, nhưng đã log đủ bằng chứng
+      continue;
     }
 
     const rawData = XLSX.utils.sheet_to_json(sheet, { 
       range: formatInfo.headerRowIndex, 
       defval: "" 
     });
-
-    console.log(`\n=> RAW ROW COUNT TRONG SHEET ${sheetName}:`, rawData.length);
-    if (rawData.length > 0) {
-      console.log("=> 5 DÒNG DATA THÔ ĐẦU TIÊN:\n", rawData.slice(0, 5));
-    }
-
-    let normalizedRowCount = 0;
 
     for (const row of rawData) {
       const mappedRow = {};
@@ -187,31 +181,26 @@ exports.parseExcel = async (filePath, io) => {
 
       if (!courseCode || !classCode || courseCode.toUpperCase().includes("MÃ")) continue;
       
-      normalizedRowCount++;
-
       let type = mappedRow['HTGD'] ? String(mappedRow['HTGD']).trim().toUpperCase() : "UNKNOWN";
       if (!["LT", "HT1", "HT2", "ĐA", "DA", "KLTN", "TTTN"].includes(type)) type = "UNKNOWN";
       if (type === "ĐA") type = "DA";
 
       const credits = mappedRow['SOTC'] ? parseFloat(mappedRow['SOTC']) || 0 : 0;
       
-      // Xử lý Credits: Chỉ gán trực tiếp SOTC làm componentCredits
       if (!coursesMap[courseCode]) {
         coursesMap[courseCode] = { 
           code: courseCode, 
           name: mappedRow['TENMH'] ? String(mappedRow['TENMH']).trim() : "", 
-          credits: 0, // Sẽ update sau dựa vào LT
+          credits: 0, 
           offerings: [],
-          _tempLtCredits: 0 // Biến tạm lưu SOTC của LT
+          _tempLtCredits: 0 
         };
       }
       
-      // Nếu là LT, cập nhật tổng tín chỉ của môn học
       if (type === 'LT') {
         coursesMap[courseCode].credits = credits;
         coursesMap[courseCode]._tempLtCredits = credits;
-      } else if (coursesMap[courseCode].credits === 0 && coursesMap[courseCode]._tempLtCredits === 0) {
-         // Fallback nếu parse trúng lớp TH trước lớp LT
+      } else if (coursesMap[courseCode].credits === 0) {
          coursesMap[courseCode].credits = credits; 
       }
 
@@ -221,10 +210,10 @@ exports.parseExcel = async (filePath, io) => {
         coursesMap[courseCode].offerings.push(offering);
       }
 
-      // Đọc trực tiếp, không suy luận parent
       const parentLtClassCode = mappedRow['MA_LOP_LT'] ? String(mappedRow['MA_LOP_LT']).trim() : null;
+      const rawPeriodStr = mappedRow['TIET'] ? String(mappedRow['TIET']).trim() : "";
 
-      const sessionsRaw = parseSessions(mappedRow['THU'], mappedRow['TIET'], mappedRow['PHONGHOC']);
+      const sessionsRaw = parseSessions(mappedRow['THU'], rawPeriodStr, mappedRow['PHONGHOC']);
       const sessions = sessionsRaw.length === 0 ? [{
         day: null, periods: [], room: "",
         weekPattern: mappedRow['CACHTUAN'] ? String(mappedRow['CACHTUAN']).trim() : "",
@@ -249,16 +238,14 @@ exports.parseExcel = async (filePath, io) => {
         componentCredits: credits, 
         parentLtClassCode,
         sessions,
-        rawCodes: [classCode]
+        rawCodes: [classCode],
+        rawPeriod: rawPeriodStr // Lưu rawPeriod để debug
       };
 
       offering.options.push(record);
     }
-    
-    console.log(`=> NORMALIZED ROW COUNT TRONG SHEET ${sheetName}:`, normalizedRowCount);
   }
 
-  // VALIDATION CUỐI CÙNG
   if (Object.keys(coursesMap).length === 0) {
     throw new Error("PARSER PRODUCED ZERO COURSES");
   }
