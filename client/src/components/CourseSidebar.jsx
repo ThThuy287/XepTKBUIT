@@ -44,7 +44,9 @@ export default function CourseSidebar() {
     if (!cls.sessions || cls.sessions.length === 0) return false; 
     
     for (const selOpt of selectedOptions) {
+      // Cùng môn và Cùng loại (đã được handle bằng prompt xác nhận), bỏ qua check overlap
       if (selOpt.courseCode === course.code && selOpt.type === cls.type) continue; 
+      
       if (!selOpt.sessions || selOpt.sessions.length === 0) continue;
       
       for (const s1 of cls.sessions) {
@@ -52,12 +54,20 @@ export default function CourseSidebar() {
         for (const s2 of selOpt.sessions) {
           if (!s2.day || !s2.periods || s2.periods.length === 0) continue;
           
-          if (s1.day === s2.day) {
-            const cleanP1 = s1.periods.map(p => p === 0 ? 10 : p);
-            const cleanP2 = s2.periods.map(p => p === 0 ? 10 : p);
+          // FIX 1: Ép kiểu số nguyên để so sánh an toàn tuyệt đối
+          if (parseInt(s1.day, 10) === parseInt(s2.day, 10)) {
+            const cleanP1 = s1.periods.map(p => p === 0 ? 10 : parseInt(p, 10));
+            const cleanP2 = s2.periods.map(p => p === 0 ? 10 : parseInt(p, 10));
             const overlap = cleanP1.some(p => cleanP2.includes(p));
             
-            if (overlap) return true; 
+            if (overlap) {
+              // FIX 2: Bổ sung logic kiểm tra Tuần học (Week Phase)
+              const w1 = s1.weekPhase || 'UNKNOWN';
+              const w2 = s2.weekPhase || 'UNKNOWN';
+              if (w1 === 'UNKNOWN' || w2 === 'UNKNOWN' || w1 === w2) {
+                return true; 
+              }
+            }
           }
         }
       }

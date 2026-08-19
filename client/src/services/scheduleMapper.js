@@ -25,8 +25,9 @@ export const mapSelectedOptionsToBlocks = (selectedOptions) => {
       isSelected: true
     };
 
+    // State A: HT2 hoàn toàn không có lịch
     if (!option.sessions || option.sessions.length === 0) {
-      blocks.push({ ...baseInfo, isOutside: true, day: null, periods: [] });
+      blocks.push({ ...baseInfo, isOutside: true, day: null, periods: [], hasSchedule: false });
       return;
     }
 
@@ -34,8 +35,9 @@ export const mapSelectedOptionsToBlocks = (selectedOptions) => {
       const rawDay = parseInt(session.day, 10);
       const dayIndex = DAYS.findIndex(d => d.value === rawDay);
 
+      // Lịch lỗi hoặc không có thời gian cụ thể
       if (dayIndex === -1 || !session.hasSchedule) {
-        blocks.push({ ...baseInfo, blockId: `${baseInfo.id}-${sIdx}-out`, day: rawDay, periods: session.periods || [], room: session.room, startDate: session.startDate, endDate: session.endDate, isOutside: true });
+        blocks.push({ ...baseInfo, blockId: `${baseInfo.id}-${sIdx}-out`, day: rawDay, periods: session.periods || [], room: session.room, startDate: session.startDate, endDate: session.endDate, isOutside: true, hasSchedule: false });
         return;
       }
 
@@ -45,16 +47,19 @@ export const mapSelectedOptionsToBlocks = (selectedOptions) => {
       const outsidePeriods = [];
       session.periods.forEach(p => {
         let pNum = parseInt(p, 10);
-        if (pNum === 0) pNum = 10; // SAFEGUARD: Ép tiết 0 thành tiết 10
+        if (pNum === 0) pNum = 10; 
         if (pNum >= 1 && pNum <= 10) mainPeriods.push(pNum);
         else outsidePeriods.push(pNum);
       });
 
+      // State B: Main Grid (Tiết <= 10)
       if (mainPeriods.length > 0) {
-        blocks.push({ ...baseInfo, blockId: `${baseInfo.id}-${sIdx}-main`, day: rawDay, periods: mainPeriods.sort((a,b)=>a-b), room: session.room, startDate: session.startDate, endDate: session.endDate, isOutside: false });
+        blocks.push({ ...baseInfo, blockId: `${baseInfo.id}-${sIdx}-main`, day: rawDay, periods: mainPeriods.sort((a,b)=>a-b), room: session.room, startDate: session.startDate, endDate: session.endDate, isOutside: false, hasSchedule: true });
       }
+      
+      // State C: Ngoài giờ (Tiết > 10)
       if (outsidePeriods.length > 0) {
-        blocks.push({ ...baseInfo, blockId: `${baseInfo.id}-${sIdx}-out`, day: rawDay, periods: outsidePeriods.sort((a,b)=>a-b), room: session.room, startDate: session.startDate, endDate: session.endDate, isOutside: true });
+        blocks.push({ ...baseInfo, blockId: `${baseInfo.id}-${sIdx}-out`, day: rawDay, periods: outsidePeriods.sort((a,b)=>a-b), room: session.room, startDate: session.startDate, endDate: session.endDate, isOutside: true, hasSchedule: true });
       }
     });
   });

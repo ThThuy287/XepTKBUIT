@@ -94,7 +94,10 @@ Tín chỉ: ${block.credits}`;
       )}
       {block.isOutside && (
         <div className="text-[10px] italic font-medium text-[#8C8A9E] mt-auto pt-1 truncate pr-4">
-          Chưa có lịch
+          {block.hasSchedule === false || !block.periods || block.periods.length === 0
+            ? 'Chưa có tiết cố định'
+            : `Tiết ${block.periods.length > 1 ? `${block.periods[0]}-${block.periods[block.periods.length - 1]}` : block.periods[0]}`
+          }
         </div>
       )}
     </div>
