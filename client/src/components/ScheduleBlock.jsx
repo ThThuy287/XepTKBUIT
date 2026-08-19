@@ -12,7 +12,6 @@ export default function ScheduleBlock({ block }) {
     return 12; 
   };
 
-  // SAFEGUARD: Ép tiết 0 thành tiết 10 để lưới vẽ đúng
   const sortedPeriods = [...block.periods].map(p => p === 0 ? 10 : p).sort((a, b) => a - b);
   const firstPeriod = sortedPeriods[0];
   const lastPeriod = sortedPeriods[sortedPeriods.length - 1];
@@ -42,7 +41,8 @@ Tín chỉ: ${block.credits}`;
   return (
     <div
       title={tooltipText}
-      className="relative group rounded-md p-2 shadow-sm text-left flex flex-col overflow-hidden border m-[2px] cursor-pointer hover:shadow-md transition-shadow"
+      // Thêm justify-start để neo toàn bộ nội dung lên sát mép trên, giảm padding một chút để rộng rãi hơn
+      className="relative group rounded-md p-1.5 lg:p-2 shadow-sm text-left flex flex-col justify-start overflow-hidden border m-[2px] cursor-pointer hover:shadow-md transition-shadow"
       style={{
         gridColumnStart: colStart,
         gridRowStart: rowStart,
@@ -67,39 +67,48 @@ Tín chỉ: ${block.credits}`;
         </svg>
       </button>
 
-      <div className="flex-1 flex flex-col min-h-0 gap-0.5 pr-4">
-        <div className="font-bold text-[11.5px] leading-tight text-[#1B1B24] line-clamp-2">
+      {/* Container chính: Bỏ mt-auto, các thành phần sẽ xếp từ trên xuống. Thiếu chỗ thì phần dưới (Phòng, Nhãn) tự động bị cắt đi */}
+      <div className="flex flex-col min-h-0 pr-4">
+        {/* Ưu tiên 1: Tên môn */}
+        <div className="font-bold text-[11px] lg:text-[11.5px] leading-tight text-[#1B1B24] line-clamp-2 shrink-0">
           {block.courseName}
         </div>
-        <div className="text-[10.5px] font-bold mt-0.5" style={{ color: block.accentColor }}>
+        
+        {/* Ưu tiên 2: Mã lớp */}
+        <div className="text-[10px] lg:text-[10.5px] font-bold mt-[2px] shrink-0 truncate" style={{ color: block.accentColor }}>
           {block.displayCode}
         </div>
-        <div className="text-[10px] text-[#464555] truncate">
+        
+        {/* Ưu tiên 3: Giảng viên */}
+        <div className="text-[9.5px] lg:text-[10px] text-[#464555] mt-[2px] shrink-0 truncate">
           {block.teacher ? `GV: ${block.teacher}` : 'GV: Chưa cập nhật'}
         </div>
-        <div className="flex items-center gap-1.5 mt-0.5">
-          <span className="text-[9px] font-bold px-1.5 py-[2px] rounded-[4px] bg-white/70 text-[#464555] shadow-sm">
+
+        {/* Thông tin phụ: Gom Loại, Tín chỉ, Phòng học lên CÙNG 1 DÒNG để tiết kiệm chiều cao cực mạnh */}
+        <div className="flex flex-wrap items-center gap-1.5 mt-1 shrink-0 overflow-hidden">
+          <span className="text-[8.5px] lg:text-[9px] font-bold px-1.5 py-[2px] rounded-[4px] bg-white/70 text-[#464555] shadow-sm whitespace-nowrap">
             {block.type}
           </span>
-          <span className="text-[9.5px] text-[#464555] font-semibold">
+          <span className="text-[9px] text-[#464555] font-semibold whitespace-nowrap">
             {block.credits} TC
           </span>
+          {!block.isOutside && block.room && (
+            <span className="text-[9px] lg:text-[9.5px] font-bold text-[#464555] whitespace-nowrap truncate">
+              • P.{block.room}
+            </span>
+          )}
         </div>
-      </div>
 
-      {!block.isOutside && block.room && (
-        <div className="text-[10px] font-bold text-[#464555] mt-auto pt-1 truncate pr-4">
-          P.{block.room}
-        </div>
-      )}
-      {block.isOutside && (
-        <div className="text-[10px] italic font-medium text-[#8C8A9E] mt-auto pt-1 truncate pr-4">
-          {block.hasSchedule === false || !block.periods || block.periods.length === 0
-            ? 'Chưa có tiết cố định'
-            : `Tiết ${block.periods.length > 1 ? `${block.periods[0]}-${block.periods[block.periods.length - 1]}` : block.periods[0]}`
-          }
-        </div>
-      )}
+        {/* Trạng thái Ngoài giờ (Nếu có) */}
+        {block.isOutside && (
+          <div className="text-[9.5px] italic font-medium text-[#8C8A9E] mt-1 shrink-0 truncate">
+            {block.hasSchedule === false || !block.periods || block.periods.length === 0
+              ? 'Chưa có tiết cố định'
+              : `Tiết ${block.periods.length > 1 ? `${block.periods[0]}-${block.periods[block.periods.length - 1]}` : block.periods[0]}`
+            }
+          </div>
+        )}
+      </div>
     </div>
   );
 }
