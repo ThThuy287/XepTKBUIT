@@ -92,7 +92,17 @@ app.use((err, req, res, next) => {
     message: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message
   });
 });
-
+// GET /api/health
+app.get('/api/health', async (req, res) => {
+  try {
+    // Kiểm tra kết nối Prisma DB
+    await prisma.$queryRaw`SELECT 1`;
+    res.status(200).json({ success: true, server: true, database: true });
+  } catch (error) {
+    console.error('[HEALTH CHECK FAILED]', error.message);
+    res.status(500).json({ success: false, server: true, database: false }); // Tuyệt đối không leak stack trace
+  }
+});
 // ==========================================
 // 6. KHỞI ĐỘNG SERVER
 // ==========================================
