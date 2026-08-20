@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://xep-tkb-uit-tau.vercel.app/sitemap.xml
